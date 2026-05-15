@@ -3567,12 +3567,12 @@
                 '        elseif (\$seg.rotation -eq 180) { \$transpose = ",transpose=1,transpose=1" }',
                 '        elseif (\$seg.rotation -eq 270) { \$transpose = ",transpose=2" }',
                 '        \$flip = if (\$flipped) { ",hflip" } else { "" }',
-                '        \$cropFilter = if (\$crop) { ",crop=\$crop" } else { "" }',
-                '        \$vFilters += "[0:v]trim=start_frame=\$startF:end_frame=\$endF,setpts=PTS-STARTPTS\$transpose\$flip\$cropFilter,scale=w=\${targetW}:h=\${targetH}:force_original_aspect_ratio=decrease,pad=\${targetW}:\${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1[\$vName]"',
+                '        \$cropFilter = if (\$crop) { ",crop={0}" -f \$crop } else { "" }',
+                '        \$vFilters += "[0:v]trim=start_frame={0}:end_frame={1},setpts=PTS-STARTPTS{2}{3}{4},scale=w={5}:h={6}:force_original_aspect_ratio=decrease,pad={5}:{6}:(ow-iw)/2:(oh-ih)/2,setsar=1[{7}]" -f \$startF, \$endF, \$transpose, \$flip, \$cropFilter, \$targetW, \$targetH, \$vName',
                 '        if (\$hasAudio) {',
                 '            \$vStart = (\$seg.start).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
                 '            \$vEnd = (\$seg.end).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
-                '            \$aFilters += "[0:a]atrim=start=\$vStart:end=\$vEnd,asetpts=PTS-STARTPTS[\$aName]"',
+                '            \$aFilters += "[0:a]atrim=start={0}:end={1},asetpts=PTS-STARTPTS[{2}]" -f \$vStart, \$vEnd, \$aName',
                 '        }',
                 '    }',
                 '    \$vConcat = (\$segments | ForEach-Object -Begin {\$idx=0} -Process {"[v\$idx]" ; \$idx++}) -join ""',
@@ -3581,7 +3581,8 @@
                 '    \$finalA = if (\$hasAudio) { "; \$aConcat concat=n=\$(\$segments.Count):v=0:a=1[a]" } else { "" }',
                 '    \$fullFilter = (\$vFilters + \$aFilters + \$finalV) -join "; "',
                 '    \$fullFilter += \$finalA',
-                '    \$fullFilter | Out-File -LiteralPath \$filterPath -Encoding utf8',
+                '    \$utf8NoBom = New-Object System.Text.UTF8Encoding \$false',
+                '    [System.IO.File]::WriteAllText(\$filterPath, \$fullFilter, \$utf8NoBom)',
                 '    ',
                 '    Write-Host "  > Encoding with filter_complex..."',
                 '    \$mapArgs = if (\$hasAudio) { @("-map", "[v]", "-map", "[a]") } else { @("-map", "[v]") }',
@@ -3601,17 +3602,19 @@
                 '    }',
                 '    foreach (\$key in \$toRemove) { \$data.Remove(\$key) }',
                 '    foreach (\$key in \$toAdd.Keys) { \$data[\$key] = \$toAdd[\$key] }',
+                '    \$utf8NoBom = New-Object System.Text.UTF8Encoding \$false',
                 '    if (\$data.Count -eq 0) {',
                 '        if (Test-Path -LiteralPath "\$filePath") { Remove-Item -LiteralPath "\$filePath" }',
                 '    } else {',
                 '        \$content = @()',
                 '        foreach (\$key in \$data.Keys) { \$content += ("{0}:{1}" -f \$key, \$data[\$key]) }',
-                '        \$content | Out-File -LiteralPath "\$filePath" -Encoding utf8',
+                '        [System.IO.File]::WriteAllLines(\$filePath, \$content, \$utf8NoBom)',
                 '    }',
                 '}',
                 '',
                 'function Update-MiscData {',
                 '    param([string]\$filePath, [hashtable]\$miscData)',
+                '    \$utf8NoBom = New-Object System.Text.UTF8Encoding \$false',
                 '    if (\$miscData.Count -eq 0) {',
                 '        if (Test-Path -LiteralPath "\$filePath") { Remove-Item -LiteralPath "\$filePath" }',
                 '    } else {',
@@ -3622,7 +3625,7 @@
                 '            }',
                 '        }',
                 '        if (\$content.Count -gt 0) {',
-                '            \$content | Out-File -LiteralPath "\$filePath" -Encoding utf8',
+                '            [System.IO.File]::WriteAllLines(\$filePath, \$content, \$utf8NoBom)',
                 '        } elseif (Test-Path -LiteralPath "\$filePath") {',
                 '            Remove-Item -LiteralPath "\$filePath"',
                 '        }',
@@ -5724,7 +5727,8 @@
             }
 
             scriptLines.push('\$playlistPath = (Join-Path -Path \"$BaseDir\" -ChildPath "playlist.m3u")');
-            scriptLines.push('\$script:playlistContent | Out-File -LiteralPath \"$playlistPath\" -Encoding utf8');
+            scriptLines.push('\$utf8NoBom = New-Object System.Text.UTF8Encoding \$false');
+            scriptLines.push('[System.IO.File]::WriteAllLines(\$playlistPath, \$script:playlistContent, \$utf8NoBom)');
             scriptLines.push('Write-Host "Playlist created at: \$playlistPath"');
 
             scriptLines.push("\$luaPath = 'C:\\Bridge\\misc\\tools\\mpv-x86_64-v3-20260418-git-4377cce\\portable_config\\scripts\\autorotate.lua'");
@@ -5766,7 +5770,8 @@
             scriptLines.push("    \$luaContent += '        mp.set_property(\"video-rotate\", rotations[filename])'");
             scriptLines.push("    \$luaContent += '    end'");
             scriptLines.push("    \$luaContent += 'end)'");
-            scriptLines.push('    \$luaContent | Out-File -LiteralPath \"$luaPath\" -Encoding utf8');
+            scriptLines.push('    \$utf8NoBom = New-Object System.Text.UTF8Encoding \$false');
+            scriptLines.push('    [System.IO.File]::WriteAllLines(\$luaPath, \$luaContent, \$utf8NoBom)');
             scriptLines.push('    Write-Host "Updated MPV autorotate script at: \$luaPath"');
             scriptLines.push('}');
 
