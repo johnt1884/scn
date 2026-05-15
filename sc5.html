@@ -1315,6 +1315,90 @@
         }
 
         // Editor Helper Functions
+        function getActualVideoRect() {
+            const video = editorMainVideo;
+            const vRect = video.getBoundingClientRect();
+            const container = document.getElementById('editor-videoContainer');
+            const cRect = container.getBoundingClientRect();
+
+            let vW = video.videoWidth;
+            let vH = video.videoHeight;
+            if (!vW || !vH) return null;
+
+            const isRot90 = (editorCurrentAppliedRotation === 90 || editorCurrentAppliedRotation === 270);
+            if (isRot90) {
+                [vW, vH] = [vH, vW];
+            }
+
+            const videoAspect = vW / vH;
+            const elementAspect = vRect.width / vRect.height;
+
+            let actualW, actualH, actualX, actualY;
+
+            if (videoAspect > elementAspect) {
+                actualW = vRect.width;
+                actualH = actualW / videoAspect;
+            } else {
+                actualH = vRect.height;
+                actualW = actualH * videoAspect;
+            }
+
+            actualX = vRect.left - cRect.left + (vRect.width - actualW) / 2;
+            actualY = vRect.top - cRect.top + (vRect.height - actualH) / 2;
+
+            return { x: actualX, y: actualY, w: actualW, h: actualH, vW, vH };
+        }
+
+        function updateCropStringFromBox() {
+            const rect = getActualVideoRect();
+            if (!rect) return;
+
+            const bX = parseFloat(editorCropBox.style.left);
+            const bY = parseFloat(editorCropBox.style.top);
+            const bW = parseFloat(editorCropBox.style.width);
+            const bH = parseFloat(editorCropBox.style.height);
+
+            let cropX = Math.round(((bX - rect.x) / rect.w) * rect.vW);
+            let cropY = Math.round(((bY - rect.y) / rect.h) * rect.vH);
+            let cropW = Math.round((bW / rect.w) * rect.vW);
+            let cropH = Math.round((bH / rect.h) * rect.vH);
+
+            // Clamp to video dimensions
+            cropX = Math.max(0, Math.min(cropX, rect.vW - 1));
+            cropY = Math.max(0, Math.min(cropY, rect.vH - 1));
+            cropW = Math.max(1, Math.min(cropW, rect.vW - cropX));
+            cropH = Math.max(1, Math.min(cropH, rect.vH - cropY));
+
+            editorPendingCrop = `${cropW}:${cropH}:${cropX}:${cropY}`;
+        }
+
+        function applyCropPreview() {
+            const clipper = document.getElementById('editor-videoClipper');
+            if (editorCurrentCrop) {
+                const rect = getActualVideoRect();
+                if (!rect) return;
+                const container = document.getElementById('editor-videoContainer');
+                const cW = container.clientWidth;
+                const cH = container.clientHeight;
+
+                const parts = editorCurrentCrop.split(':').map(Number);
+
+                const visualCropX = rect.x + (parts[2] / rect.vW) * rect.w;
+                const visualCropY = rect.y + (parts[3] / rect.vH) * rect.h;
+                const visualCropW = (parts[0] / rect.vW) * rect.w;
+                const visualCropH = (parts[1] / rect.vH) * rect.h;
+
+                const pT = (visualCropY / cH) * 100;
+                const pR = 100 - ((visualCropX + visualCropW) / cW) * 100;
+                const pB = 100 - ((visualCropY + visualCropH) / cH) * 100;
+                const pL = (visualCropX / cW) * 100;
+
+                clipper.style.clipPath = `inset(${pT}% ${pR}% ${pB}% ${pL}%)`;
+            } else {
+                clipper.style.clipPath = '';
+            }
+        }
+
         function editorTimeToFrame(time) {
             return Math.round(time * editorEstimatedFPS);
         }
@@ -1869,90 +1953,6 @@
                         editorDeleteEditThumbsBtn.style.backgroundColor = '';
                     }
                 };
-            }
-
-            function getActualVideoRect() {
-                const video = editorMainVideo;
-                const vRect = video.getBoundingClientRect();
-                const container = document.getElementById('editor-videoContainer');
-                const cRect = container.getBoundingClientRect();
-                
-                let vW = video.videoWidth;
-                let vH = video.videoHeight;
-                if (!vW || !vH) return null;
-                
-                const isRot90 = (editorCurrentAppliedRotation === 90 || editorCurrentAppliedRotation === 270);
-                if (isRot90) {
-                    [vW, vH] = [vH, vW];
-                }
-
-                const videoAspect = vW / vH;
-                const elementAspect = vRect.width / vRect.height;
-                
-                let actualW, actualH, actualX, actualY;
-                
-                if (videoAspect > elementAspect) {
-                    actualW = vRect.width;
-                    actualH = actualW / videoAspect;
-                } else {
-                    actualH = vRect.height;
-                    actualW = actualH * videoAspect;
-                }
-                
-                actualX = vRect.left - cRect.left + (vRect.width - actualW) / 2;
-                actualY = vRect.top - cRect.top + (vRect.height - actualH) / 2;
-                
-                return { x: actualX, y: actualY, w: actualW, h: actualH, vW, vH };
-            }
-
-            function updateCropStringFromBox() {
-                const rect = getActualVideoRect();
-                if (!rect) return;
-                
-                const bX = parseFloat(editorCropBox.style.left);
-                const bY = parseFloat(editorCropBox.style.top);
-                const bW = parseFloat(editorCropBox.style.width);
-                const bH = parseFloat(editorCropBox.style.height);
-                
-                let cropX = Math.round(((bX - rect.x) / rect.w) * rect.vW);
-                let cropY = Math.round(((bY - rect.y) / rect.h) * rect.vH);
-                let cropW = Math.round((bW / rect.w) * rect.vW);
-                let cropH = Math.round((bH / rect.h) * rect.vH);
-
-                // Clamp to video dimensions
-                cropX = Math.max(0, Math.min(cropX, rect.vW - 1));
-                cropY = Math.max(0, Math.min(cropY, rect.vH - 1));
-                cropW = Math.max(1, Math.min(cropW, rect.vW - cropX));
-                cropH = Math.max(1, Math.min(cropH, rect.vH - cropY));
-                
-                editorPendingCrop = `${cropW}:${cropH}:${cropX}:${cropY}`;
-            }
-
-            function applyCropPreview() {
-                const clipper = document.getElementById('editor-videoClipper');
-                if (editorCurrentCrop) {
-                    const rect = getActualVideoRect();
-                    if (!rect) return;
-                    const container = document.getElementById('editor-videoContainer');
-                    const cW = container.clientWidth;
-                    const cH = container.clientHeight;
-
-                    const parts = editorCurrentCrop.split(':').map(Number);
-                    
-                    const visualCropX = rect.x + (parts[2] / rect.vW) * rect.w;
-                    const visualCropY = rect.y + (parts[3] / rect.vH) * rect.h;
-                    const visualCropW = (parts[0] / rect.vW) * rect.w;
-                    const visualCropH = (parts[1] / rect.vH) * rect.h;
-                    
-                    const pT = (visualCropY / cH) * 100;
-                    const pR = 100 - ((visualCropX + visualCropW) / cW) * 100;
-                    const pB = 100 - ((visualCropY + visualCropH) / cH) * 100;
-                    const pL = (visualCropX / cW) * 100;
-                    
-                    clipper.style.clipPath = `inset(${pT}% ${pR}% ${pB}% ${pL}%)`;
-                } else {
-                    clipper.style.clipPath = '';
-                }
             }
 
             if (editorCropBtn) {
